@@ -72,6 +72,74 @@ func (context *Context) parse_program() {
 
 }
 
+func (context *Context) tokenise_line(line string, ch chan Token) {
+	str_offset := 0
+	for {
+		if str_offset >= len(line) {
+			break
+		}
+		// consume whitespace
+		for {
+			if line[str_offset] == ' ' {
+				str_offset++
+			} else {
+				break
+			}
+		}
+		// read next char
+		next_char := line[str_offset]
+		// Check if the token is in the LUT
+		if token_type, ok := Token_type_lookup[string(next_char)]; ok {
+			ch <- Token{token_type: token_type, value: string(next_char)}
+			str_offset++
+			continue
+		}
+		// Check if the token is a number
+		if is_digit(next_char) {
+			number, new_offset := read_float(line, str_offset)
+			ch <- Token{token_type: NUMBER, value: number}
+			str_offset = new_offset
+			continue
+		}
+		// Check if the token is a string
+		if next_char == '"' {
+			str, new_offset := read_rest_of_string(line, str_offset+1)
+			ch <- Token{token_type: STRING, value: str}
+			str_offset = new_offset + 1 // last "
+			continue
+		}
+		// Get the next set of alpha characters
+		word, new_offset := read_until_next_non_alpha(line, str_offset)
+		// Check if the token is a keyword
+		if Is_keyword(word) {
+			ch <- Token{token_type: KEYWORD, value: word}
+			str_offset = new_offset
+			continue
+		}
+		// Check if the token is a variable
+		if _, ok := context.user_variables[word]; ok {
+			ch <- Token{token_type: USER_VAR, value: word}
+			str_offset = new_offset
+			continue
+		}
+		// Check if it's a std function
+		if _, ok := functions.Std_fcns[word]; ok {
+			ch <- Token{token_type: STD_FCN, value: word}
+			str_offset = new_offset
+			continue
+		}
+		// If it's none of the above, it's an error
+		panic("Unrecognised token: " + word)
+	}
+	close(ch)
+
+}
+
+func (context *Context) next_token(ch chan Token) (Token, bool) {
+	tkn, open := <-ch
+	return tkn, open
+}
+
 func (context *Context) execute_line(line string) {
 	// Split the line into identifiers
 	// If the line is empty, skip it
@@ -79,85 +147,33 @@ func (context *Context) execute_line(line string) {
 		context.program_counter++
 		return
 	} else {
-		// tokenise the line by reading it one character at a time and assembling a slice of tokens
-		tokens := make([]Token, 0)
-		str_offset := 0
-		for {
-			if str_offset >= len(line) {
-				break
-			}
-			// consume whitespace
-			for {
-				if line[str_offset] == ' ' {
-					str_offset++
-				} else {
-					break
-				}
-			}
-			// read next char
-			next_char := line[str_offset]
-			// Check if the token is in the LUT
-			if token_type, ok := Token_type_lookup[string(next_char)]; ok {
-				tokens = append(tokens, Token{token_type: token_type, value: string(next_char)})
-				str_offset++
-				continue
-			}
-			// Check if the token is a number
-			if is_digit(next_char) {
-				number, new_offset := read_float(line, str_offset)
-				tokens = append(tokens, Token{token_type: NUMBER, value: number})
-				str_offset = new_offset
-				continue
-			}
-			// Check if the token is a string
-			if next_char == '"' {
-				str, new_offset := read_rest_of_string(line, str_offset+1)
-				tokens = append(tokens, Token{token_type: STRING, value: str})
-				str_offset = new_offset + 1 // last "
-				continue
-			}
-			// Get the next set of alpha characters
-			word, new_offset := read_until_next_non_alpha(line, str_offset)
-			// Check if the token is a keyword
-			if Is_keyword(word) {
-				tokens = append(tokens, Token{token_type: KEYWORD, value: word})
-				str_offset = new_offset
-				continue
-			}
-			// Check if the token is a variable
-			if _, ok := context.user_variables[word]; ok {
-				tokens = append(tokens, Token{token_type: USER_VAR, value: word})
-				str_offset = new_offset
-				continue
-			}
-			// Check if it's a std function
-			if _, ok := functions.Std_fcns[word]; ok {
-				tokens = append(tokens, Token{token_type: STD_FCN, value: word})
-				str_offset = new_offset
-				continue
-			}
-			// If it's none of the above, it's an error
-			panic("Unrecognised token: " + word)
-		}
+		ch := make(chan Token)
+		go context.tokenise_line(line, ch)
+		t, alive := context.next_token(ch)
 
-		// Now, we have a slice of tokens, we can execute the line
-		for idx := 0; idx < len(tokens); idx++ {
-			t := tokens[idx]
+		for alive {
 			switch t.token_type {
 			case STD_FCN:
 				// Get the function
 				fcn := functions.Std_fcns[t.value]
 				// Get the arguments
 				args := make([]variable.User_variable, 0)
-				// assume that everything after the function name is an argument
-				for j := idx + 1; j < len(tokens); j++ {
-					// skip commas
-					if tokens[j].token_type == DELIMITER_COMMA {
-						continue
+				// Keep getting tokens until we see a delimiter or hit the end of the line
+				for {
+					t, alive = context.next_token(ch)
+					if !alive {
+						break
 					}
-					// Make string literal into a string user var
-					if tokens[j].token_type == STRING {
-						args = append(args, variable.VARTYPE_STRING{}.New(tokens[j].value))
+					if t.token_type == STRING {
+						args = append(args, variable.VARTYPE_STRING{}.New(t.value))
+					} else if t.token_type == NUMBER {
+						args = append(args, variable.VARTYPE_NUMBER{}.From_string(t.value))
+					} else if t.token_type == USER_VAR {
+						args = append(args, context.user_variables[t.value])
+					} else if t.token_type == DELIMITER_COMMA {
+						continue
+					} else {
+						break
 					}
 				}
 				// Execute the function
@@ -165,7 +181,11 @@ func (context *Context) execute_line(line string) {
 			default:
 				// Do nothing
 			}
-
+			if !alive {
+				break
+			} else {
+				t, alive = context.next_token(ch)
+			}
 		}
 	}
 

@@ -33,6 +33,15 @@ func (v VARTYPE_NUMBER) Value() interface{} {
 	return v.value
 }
 
+func (v VARTYPE_NUMBER) New(value float64) VARTYPE_NUMBER {
+	return VARTYPE_NUMBER{value}
+}
+
+func (v VARTYPE_NUMBER) From_string(value string) VARTYPE_NUMBER {
+	result, _ := strconv.ParseFloat(value, 64)
+	return VARTYPE_NUMBER{result}
+}
+
 type VARTYPE_STRING struct {
 	value string
 }
