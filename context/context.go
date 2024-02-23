@@ -108,12 +108,6 @@ func (context *Context) tokenise_line(line string, ch chan Token) {
 			str_offset = new_offset + 1 // last "
 			continue
 		}
-		// Check if it's an operator
-		if next_char == '+' || next_char == '-' || next_char == '*' || next_char == '/' || next_char == '%' || next_char == '^' || next_char == '=' || next_char == '!' {
-			ch <- Token{token_type: Token_type_lookup[string(next_char)], value: string(next_char)}
-			str_offset++
-			continue
-		}
 		// Get the next set of alpha characters
 		word, new_offset := read_until_next_non_alpha(line, str_offset)
 		// Check if the token is a keyword
@@ -183,11 +177,11 @@ func (context *Context) execute_statement(ch chan Token) (variable.User_variable
 				}
 			}
 			// Execute the function
-			result := fcn_state.Fcn(context.terminal, fcn_state.Args)
+			result, _ := fcn_state.Fcn(context.terminal, fcn_state.Args)
 			// There's got to be a more idiomatic way to do this. If I change it to *User_variable, strings and numbers don't work any more
 			// I'm probably missing something obvious
 			if result != nil {
-				return *result, stopped_token
+				return result, stopped_token
 			}
 			return nil, stopped_token
 		case USER_VAR:
@@ -214,7 +208,16 @@ func (context *Context) execute_statement(ch chan Token) (variable.User_variable
 				return state.(Exec_state_user_var).Variable, &t
 			}
 			break
-		case OPERATOR_ADD:
+		case OPERATOR:
+			if state == nil && t.value == "-" {
+				// minus
+				// Check if the next token is a number
+				next_tkn, _ := context.next_token(ch)
+				if next_tkn.token_type == NUMBER {
+					state = Exec_state_user_var{Variable: variable.VARTYPE_NUMBER{}.From_string("-" + next_tkn.value)}
+					continue
+				}
+			}
 			state = Exec_state_operator{}.From_user_var(state.(Exec_state_user_var), t.value)
 			// evaluate for the rhs
 			user_var, stopped_token := context.execute_statement(ch)

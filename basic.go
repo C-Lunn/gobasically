@@ -13,9 +13,7 @@ func (t t) Printline(s string) {
 
 func main() {
 	prog :=
-		`20 PRINT "world!"
-10 PRINT "Hello,"
-30 PRINT 3+3+4`
+		`30 PRINT 2 + ABS(-3)`
 
 	term := t{}
 

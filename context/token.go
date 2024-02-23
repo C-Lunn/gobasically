@@ -8,14 +8,7 @@ const (
 	USER_VAR
 	STD_FCN
 	USER_FCN
-	OPERATOR_ADD
-	OPERATOR_SUB
-	OPERATOR_MUL
-	OPERATOR_DIV
-	OPERATOR_MOD
-	OPERATOR_XOR
-	OPERATOR_EQ
-	OPERATOR_NEQ
+	OPERATOR
 	DELIMITER_COMMA
 	DELIMITER_SEMICOLON
 	DELIMITER_LBRACKET
@@ -37,14 +30,14 @@ type Token struct {
 }
 
 var Token_type_lookup = map[string]TOKEN_TYPE{
-	"+":  OPERATOR_ADD,
-	"-":  OPERATOR_SUB,
-	"*":  OPERATOR_MUL,
-	"/":  OPERATOR_DIV,
-	"%":  OPERATOR_MOD,
-	"^":  OPERATOR_XOR,
-	"=":  OPERATOR_EQ,
-	"!=": OPERATOR_NEQ,
+	"+":  OPERATOR,
+	"-":  OPERATOR,
+	"*":  OPERATOR,
+	"/":  OPERATOR,
+	"%":  OPERATOR,
+	"^":  OPERATOR,
+	"=":  OPERATOR,
+	"<>": OPERATOR,
 	",":  DELIMITER_COMMA,
 	";":  DELIMITER_SEMICOLON,
 	"(":  DELIMITER_LBRACKET,
@@ -58,6 +51,9 @@ var Token_type_lookup = map[string]TOKEN_TYPE{
 }
 
 func read_float(s string, offset int) (string, int) {
+	if s[offset] == '-' {
+		offset++
+	}
 	for i := offset; i < len(s); i++ {
 		if s[i] < '0' || s[i] > '9' || s[i] == '.' {
 			return s[offset:i], i

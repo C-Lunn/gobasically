@@ -5,9 +5,9 @@ import (
 	"basicallygo/variable"
 )
 
-func PRINT(term terminal.Terminal, arguments []variable.User_variable) *variable.User_variable {
+func PRINT(term terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
 	for _, argument := range arguments {
 		term.Printline(argument.To_string())
 	}
-	return nil
+	return nil, nil
 }
