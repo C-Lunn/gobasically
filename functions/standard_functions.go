@@ -5,9 +5,9 @@ import (
 	"basicallygo/variable"
 )
 
-type Standard_function func(terminal.Terminal, []variable.User_variable) variable.User_variable
+type Function func(terminal.Terminal, []variable.User_variable) *variable.User_variable
 
-type Standard_functions map[string]Standard_function
+type Standard_functions map[string]Function
 
 var Std_fcns Standard_functions = Standard_functions{
 	"PRINT": PRINT,

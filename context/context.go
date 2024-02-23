@@ -108,6 +108,12 @@ func (context *Context) tokenise_line(line string, ch chan Token) {
 			str_offset = new_offset + 1 // last "
 			continue
 		}
+		// Check if it's an operator
+		if next_char == '+' || next_char == '-' || next_char == '*' || next_char == '/' || next_char == '%' || next_char == '^' || next_char == '=' || next_char == '!' {
+			ch <- Token{token_type: Token_type_lookup[string(next_char)], value: string(next_char)}
+			str_offset++
+			continue
+		}
 		// Get the next set of alpha characters
 		word, new_offset := read_until_next_non_alpha(line, str_offset)
 		// Check if the token is a keyword
@@ -140,62 +146,103 @@ func (context *Context) next_token(ch chan Token) (Token, bool) {
 	return tkn, open
 }
 
-func (context *Context) execute_line(line string) {
-	// Split the line into identifiers
-	// If the line is empty, skip it
-	if len(line) == 0 {
-		context.program_counter++
-		return
-	} else {
-		ch := make(chan Token)
-		go context.tokenise_line(line, ch)
+/**
+ * Execute a statement
+ * Returns when a delimiter is seen (i.e. semicolon, comma, or line end)
+ * Idea is that it's called recursively
+ */
+func (context *Context) execute_statement(ch chan Token) (variable.User_variable, *Token) {
+	var state Exec_state
+	for {
 		t, alive := context.next_token(ch)
-
-		for alive {
-			switch t.token_type {
-			case STD_FCN:
-				// Get the function
-				fcn := functions.Std_fcns[t.value]
-				// Get the arguments
-				args := make([]variable.User_variable, 0)
-				// Keep getting tokens until we see a delimiter or hit the end of the line
-				for {
-					t, alive = context.next_token(ch)
-					if !alive {
-						break
-					}
-					if t.token_type == STRING {
-						args = append(args, variable.VARTYPE_STRING{}.New(t.value))
-					} else if t.token_type == NUMBER {
-						args = append(args, variable.VARTYPE_NUMBER{}.From_string(t.value))
-					} else if t.token_type == USER_VAR {
-						args = append(args, context.user_variables[t.value])
-					} else if t.token_type == DELIMITER_COMMA {
-						continue
-					} else {
-						break
-					}
+		if !alive {
+			if state != nil {
+				return state.(Exec_state_user_var).Variable, &t
+			}
+			return nil, nil
+		}
+		switch t.token_type {
+		case STD_FCN:
+			state = Exec_state_Fcn{Fcn: functions.Std_fcns[t.value]}
+			fcn_state := state.(Exec_state_Fcn)
+			// slice for the arguments
+			fcn_state.Args = make([]variable.User_variable, 0)
+			// Evaluate each argument until ; or line end
+			var stopped_token *Token
+			for {
+				user_var, stopped_token := context.execute_statement(ch)
+				if user_var != nil {
+					fcn_state.Args = append(state.(Exec_state_Fcn).Args, user_var)
 				}
-				// Execute the function
-				fcn(context.terminal, args)
-			default:
-				// Do nothing
+				if stopped_token != nil {
+					if stopped_token.token_type == DELIMITER_SEMICOLON {
+						break
+					}
+				} else {
+					break
+				}
 			}
-			if !alive {
-				break
-			} else {
-				t, alive = context.next_token(ch)
+			// Execute the function
+			result := fcn_state.Fcn(context.terminal, fcn_state.Args)
+			// There's got to be a more idiomatic way to do this. If I change it to *User_variable, strings and numbers don't work any more
+			// I'm probably missing something obvious
+			if result != nil {
+				return *result, stopped_token
 			}
+			return nil, stopped_token
+		case USER_VAR:
+			// If state hasn't been initialised, then it's the first (or maybe only) user var
+			if state == nil {
+				state = Exec_state_user_var{Variable: context.user_variables[t.value]}
+			}
+			continue
+		case NUMBER:
+			// Get the number
+			if state == nil {
+				state = Exec_state_user_var{Variable: variable.VARTYPE_NUMBER{}.From_string(t.value)}
+			}
+			continue
+		case STRING:
+			// Get the string
+			if state == nil {
+				state = Exec_state_user_var{Variable: variable.VARTYPE_STRING{}.New(t.value)}
+			}
+			continue
+		case DELIMITER_COMMA:
+		case DELIMITER_SEMICOLON:
+			if state != nil {
+				return state.(Exec_state_user_var).Variable, &t
+			}
+			break
+		case OPERATOR_ADD:
+			state = Exec_state_operator{}.From_user_var(state.(Exec_state_user_var), t.value)
+			// evaluate for the rhs
+			user_var, stopped_token := context.execute_statement(ch)
+			// execute the operator
+			op_state := state.(Exec_state_operator)
+			result, _ := op_state.Operator_func(op_state.Left, user_var)
+			return result, stopped_token
+		}
+
+	}
+}
+
+func (context *Context) get_idx_of_line_no(line_no int) int {
+	for idx, line := range context.program {
+		if line.line_number == line_no {
+			return idx
 		}
 	}
-
+	return -1
 }
 
 func (context *Context) Run() {
 	context.parse_program()
 	context.program_counter = 0
 	for context.program_counter < len(context.program) {
-		context.execute_line(context.program[context.program_counter].line)
+		ch := make(chan Token)
+		go context.tokenise_line(context.program[context.program_counter].line, ch)
+		_, _ = context.execute_statement(ch)
 		context.program_counter++
 	}
 }
