@@ -130,7 +130,7 @@ func EQ(left variable.User_variable, right variable.User_variable) (variable.Use
 
 func NEQ(left variable.User_variable, right variable.User_variable) (variable.User_variable, error) {
 	res, err := EQ(left, right)
-	if err != nil {
+	if err == nil {
 		if res.Value().(float64) == 0 {
 			return variable.VARTYPE_NUMBER{}.New(1), nil
 		}
@@ -174,7 +174,7 @@ var Ops = Operators{
 	">=":  GTE,
 	"<":   LT,
 	"<=":  LTE,
-	"=":   EQ,
+	"==":  EQ,
 	"<>":  NEQ,
 	"AND": AND,
 	"OR":  OR,

@@ -3,10 +3,10 @@ package context
 import "strings"
 
 var KEYWORDS = []string{
-	"AND",
 	"DATA",
 	"DIM",
 	"END",
+	"ELSE",
 	"FN",
 	"FOR",
 	"GOSUB",
@@ -17,7 +17,6 @@ var KEYWORDS = []string{
 	"NEXT",
 	"NOT",
 	"ON",
-	"OR",
 	"REM",
 	"RETURN",
 	"STEP",

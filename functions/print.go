@@ -6,8 +6,10 @@ import (
 )
 
 func PRINT(term terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
+	out := ""
 	for _, argument := range arguments {
-		term.Printline(argument.To_string())
+		out += argument.To_string() + " "
 	}
+	term.Printline(out)
 	return nil, nil
 }
