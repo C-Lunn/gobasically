@@ -5,7 +5,6 @@ import (
 	"basicallygo/terminal"
 	"basicallygo/variable"
 	"errors"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -18,7 +17,7 @@ type code_line struct {
 }
 
 type Context struct {
-	terminal          terminal.Terminal
+	terminal          *terminal.Terminal
 	input_buffer      string
 	program           []code_line
 	program_counter   int // index in slice of current line
@@ -29,7 +28,7 @@ type Context struct {
 }
 
 func New(
-	terminal terminal.Terminal,
+	terminal *terminal.Terminal,
 ) *Context {
 	context := new(Context)
 	context.terminal = terminal
@@ -599,7 +598,7 @@ func (context *Context) sort_program() {
 	})
 }
 
-func (context *Context) Run(interrupt chan os.Signal, done chan bool) {
+func (context *Context) Run(interrupt chan bool, done chan bool) {
 	// clear args
 	context.user_variables = make(map[string]variable.User_variable)
 	context.sort_program()

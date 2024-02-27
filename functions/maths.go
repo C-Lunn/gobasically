@@ -8,7 +8,7 @@ import (
 	"math"
 )
 
-func LOG(term terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
+func LOG(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
 	if len(arguments) != 1 {
 		return nil, errors.New("LOG: Invalid number of arguments")
 	}
@@ -22,7 +22,7 @@ func LOG(term terminal.Terminal, arguments []variable.User_variable) (variable.U
 	return variable.VARTYPE_NUMBER{}.New(res), nil
 }
 
-func SQR(term terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
+func SQR(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
 	if len(arguments) != 1 {
 		return nil, errors.New("SQR: Invalid number of arguments")
 	}
@@ -36,7 +36,7 @@ func SQR(term terminal.Terminal, arguments []variable.User_variable) (variable.U
 	return variable.VARTYPE_NUMBER{}.New(res), nil
 }
 
-func SIN(term terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
+func SIN(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
 	if len(arguments) != 1 {
 		return nil, errors.New("SIN: Invalid number of arguments")
 	}
@@ -50,7 +50,7 @@ func SIN(term terminal.Terminal, arguments []variable.User_variable) (variable.U
 	return variable.VARTYPE_NUMBER{}.New(res), nil
 }
 
-func COS(term terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
+func COS(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
 	if len(arguments) != 1 {
 		return nil, errors.New("COS: Invalid number of arguments")
 	}
@@ -64,7 +64,7 @@ func COS(term terminal.Terminal, arguments []variable.User_variable) (variable.U
 	return variable.VARTYPE_NUMBER{}.New(res), nil
 }
 
-func TAN(term terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
+func TAN(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
 	if len(arguments) != 1 {
 		return nil, errors.New("TAN: Invalid number of arguments")
 	}
@@ -78,7 +78,7 @@ func TAN(term terminal.Terminal, arguments []variable.User_variable) (variable.U
 	return variable.VARTYPE_NUMBER{}.New(res), nil
 }
 
-func ABS(term terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
+func ABS(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
 	if len(arguments) != 1 {
 		return nil, errors.New("ABS: Invalid number of arguments")
 	}
@@ -92,7 +92,7 @@ func ABS(term terminal.Terminal, arguments []variable.User_variable) (variable.U
 	return variable.VARTYPE_NUMBER{}.New(res), nil
 }
 
-func EXP(term terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
+func EXP(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
 	if len(arguments) != 1 {
 		return nil, errors.New("EXP: Invalid number of arguments")
 	}
@@ -106,7 +106,7 @@ func EXP(term terminal.Terminal, arguments []variable.User_variable) (variable.U
 	return variable.VARTYPE_NUMBER{}.New(res), nil
 }
 
-func VAL(term terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
+func VAL(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
 	if len(arguments) != 1 {
 		return nil, errors.New("VAL: Invalid number of arguments")
 	}

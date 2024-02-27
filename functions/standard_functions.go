@@ -5,7 +5,7 @@ import (
 	"basicallygo/variable"
 )
 
-type Function func(terminal.Terminal, []variable.User_variable) (variable.User_variable, error)
+type Function func(*terminal.Terminal, []variable.User_variable) (variable.User_variable, error)
 
 type Standard_functions map[string]Function
 

@@ -2,18 +2,12 @@ package main
 
 import (
 	"basicallygo/context"
+	"basicallygo/terminal"
 	"bufio"
 	"os"
 	"os/signal"
 	"strings"
 )
-
-type t struct {
-}
-
-func (t t) Printline(s string) {
-	println(s)
-}
 
 func main() {
 	// 	prog :=
@@ -24,25 +18,40 @@ func main() {
 	// 50 GOTO 40
 	// 60 GOTO 50`
 
-	term := t{}
+	term := terminal.Terminal{
+		Printline: func(s string) {
+			println(s)
+		},
+	}
 
-	cont := context.New(term)
+	cont := context.New(&term)
 
 	// Get user input, add it to the input buffer, then run when user types RUN
 	// The input buffer is a string containing the whole program, but read one user input at a time
 	// This is a simple way to simulate a user typing in a program
 
 	interrupt := make(chan os.Signal, 1)
+	interrupt_bool := make(chan bool)
 	quit := make(chan bool)
 
 	signal.Notify(interrupt, os.Interrupt)
 
-	go repl(interrupt, quit, cont)
+	go func() {
+		for {
+			select {
+			case <-interrupt:
+				interrupt_bool <- true
+				return
+			}
+		}
+	}()
+
+	go repl(interrupt_bool, quit, cont)
 
 	<-quit
 }
 
-func repl(interrupt chan os.Signal, quit chan bool, cont *context.Context) {
+func repl(interrupt chan bool, quit chan bool, cont *context.Context) {
 	prog :=
 		`10 LET A = 1
 20 LET B = 2
