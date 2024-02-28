@@ -3,7 +3,6 @@ package main
 import (
 	"basicallygo/context"
 	"basicallygo/terminal"
-	"fmt"
 	"syscall/js"
 )
 
@@ -17,15 +16,14 @@ func main() {
 	global.Set("basic_set_term_printline", js.FuncOf(func(this js.Value, p []js.Value) interface{} {
 		function := p[0]
 		term.Printline = func(s string) {
-			println("invoking", function.String())
 			function.Invoke(js.ValueOf(s))
 		}
-		return nil
+		return js.ValueOf(true)
 	}))
 
 	global.Set("basic_accept_line", js.FuncOf(func(this js.Value, p []js.Value) interface{} {
-		cont.Accept_line(p[0].String())
-		return nil
+		ok := cont.Accept_line(p[0].String())
+		return js.ValueOf(ok)
 	}))
 
 	global.Set("basic_run", js.FuncOf(func(this js.Value, p []js.Value) interface{} {
@@ -40,11 +38,8 @@ func main() {
 	}))
 
 	global.Set("basic_list", js.FuncOf(func(this js.Value, p []js.Value) interface{} {
-		println("In list")
-		fmt.Printf("%+v\n", term)
 		cont.List()
 		return nil
 	}))
-
 	<-done
 }

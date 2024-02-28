@@ -56,48 +56,45 @@ func (context *Context) ess_replace_top(state Exec_state) {
 }
 
 func (context *Context) ess_peek(which int) Exec_state {
+	if len(context.exec_state_stack) == 0 {
+		return nil
+	}
 	return context.exec_state_stack[len(context.exec_state_stack)-1-which]
+}
+
+func (context *Context) rss_push(state Run_state) {
+	context.run_state_stack = append(context.run_state_stack, state)
+}
+
+func (context *Context) rss_pop() Run_state {
+	if len(context.run_state_stack) == 0 {
+		return nil
+	}
+	state := context.run_state_stack[len(context.run_state_stack)-1]
+	context.run_state_stack = context.run_state_stack[:len(context.run_state_stack)-1]
+	return state
+}
+
+func (context *Context) rss_replace_top(state Run_state) {
+	context.run_state_stack[len(context.run_state_stack)-1] = state
+}
+
+func (context *Context) rss_peek(which int) Run_state {
+	if len(context.run_state_stack) == 0 {
+		return nil
+	}
+	return context.run_state_stack[len(context.run_state_stack)-1-which]
+}
+
+func (context *Context) rss_peek_type(which int) RUN_STATE {
+	if len(context.run_state_stack) == 0 {
+		return RUN_STATE_NORMAL
+	}
+	return context.run_state_stack[len(context.run_state_stack)-1-which].Get_state()
 }
 
 func (context *Context) Set_input_buffer(input_buffer string) {
 	context.input_buffer = input_buffer
-}
-
-func (context *Context) parse_program() {
-	context.program = make([]code_line, 0)
-	split_program := strings.Split(context.input_buffer, "\n")
-	// If the string starts with 1-5 numbers followed by a space, we can assume it is a line number, else continue the previous line
-	regex_test := regexp.MustCompile(`^\d{1,5} `)
-	for _, line := range split_program {
-		if line == "\n" || line == "" {
-			continue
-		}
-		if regex_test.MatchString(line) {
-			// This is a new line
-			// Split the line into line number and code
-			line_number_string := regex_test.FindString(line)
-			// Trim the space off the end
-			line_number_string = strings.TrimSuffix(line_number_string, " ")
-			line_number, _ := strconv.Atoi(line_number_string)
-			line = strings.TrimPrefix(line, line_number_string)
-			// remove last \n
-			line = strings.TrimSuffix(line, "\n")
-			context.program = append(context.program, code_line{line_number: line_number, line: line})
-
-		} else {
-			// This is a continuation of the previous line
-			// remove last \n
-			line = strings.TrimSuffix(line, "\n")
-			// add to last line
-			context.program[len(context.program)-1].line += line
-
-		}
-	}
-	// Now, sort the slice according to line number
-	sort.SliceStable(context.program, func(i, j int) bool {
-		return context.program[i].line_number < context.program[j].line_number
-	})
-
 }
 
 func (context *Context) parse_line(line string) error {
@@ -134,11 +131,13 @@ func (context *Context) parse_line(line string) error {
 	return nil
 }
 
-func (context *Context) Accept_line(line string) {
+func (context *Context) Accept_line(line string) bool {
 	err := context.parse_line(line)
 	if err != nil {
 		context.terminal.Printline(err.Error())
+		return false
 	}
+	return true
 }
 
 func (context *Context) List() {
@@ -165,14 +164,18 @@ func (context *Context) tokenise_line(line string) {
 		}
 		// read next char
 		next_char := line[str_offset]
-		// Workaround for <>, OR, AND, ==
-		if (next_char == 'O' || next_char == '<' || next_char == '=') && str_offset+1 < len(line) {
-			if line[str_offset+1] == 'R' || line[str_offset+1] == '>' || line[str_offset+1] == '=' {
-				ch <- Token{token_type: OPERATOR, value: string(line[str_offset : str_offset+2])}
+		// Workaround for <>, OR, AND, ==, <=, >=
+		if (next_char == 'O' || next_char == '<' || next_char == '=' || next_char == '>') && str_offset+1 < len(line) {
+			if next_char == 'O' && line[str_offset+1] == 'R' {
+				ch <- Token{token_type: OPERATOR, value: "OR"}
 				str_offset += 2
 				continue
 			}
-
+			if w := string(next_char) + string(line[str_offset+1]); w == "<=" || w == ">=" || w == "<>" || w == "==" {
+				ch <- Token{token_type: OPERATOR, value: w}
+				str_offset += 2
+				continue
+			}
 		} else if next_char == 'A' && str_offset+2 < len(line) {
 			if line[str_offset+1] == 'N' && line[str_offset+2] == 'D' {
 				ch <- Token{token_type: OPERATOR, value: "AND"}
@@ -244,11 +247,8 @@ func (context *Context) next_token_line_aware() (*Token, bool) {
 	return &tkn, true
 }
 
-func (context *Context) peek_top_run_state_stack() RUN_STATE {
-	if len(context.run_state_stack) == 0 {
-		return RUN_STATE_NORMAL
-	}
-	return context.run_state_stack[len(context.run_state_stack)-1].Get_state()
+func (context *Context) is_in_if() bool {
+	return context.rss_peek_type(0) == RUN_STATE_IF
 }
 
 /**
@@ -263,7 +263,69 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 	var alive bool
 	for {
 		if get_next_token {
-			t, alive = context.next_token_line_aware()
+			if context.is_in_if() {
+				// If we're in an if statement, firstly check if we're at THEN.
+				// If we're at THEN, and the result is true, then simply keep executing.
+				// If not, keep yielding tokens until we hit end, else, or eof
+				st := context.rss_peek(0).(*Run_state_if)
+				if !st.In_condition { // we're at THEN
+					if st.Result {
+						t, alive = context.next_token_line_aware()
+						if !alive {
+							err := errors.New("IF: RAN INTO PROGRAM END")
+							return nil, nil, err
+						}
+						// handle special case: GOTO
+						if t.token_type == KEYWORD && t.value == "GOTO" {
+							// Get the next token
+							t, _ := context.next_token_line_aware()
+							if t.token_type != NUMBER {
+								e := errors.New("GOTO: Expected a line number")
+								return nil, nil, e
+							}
+							line_no_as_int, _ := strconv.Atoi(t.value)
+							idx := context.get_idx_of_line_no(line_no_as_int)
+							if idx == -1 {
+								e := errors.New("GOTO: Line number not found")
+								return nil, nil, e
+							}
+							context.program_counter = idx
+							// drain the channel so we don't leak goros
+							for t.token_type != DELIMITER_EOL {
+								tkn := <-context.tokeniser_channel
+								t = &tkn
+							}
+							context.tokeniser_channel = make(chan Token)
+							go context.tokenise_line(context.program[context.program_counter].line)
+							context.rss_pop()
+							return nil, nil, nil
+						}
+						st.In_condition = true
+						t, alive = context.next_token_line_aware()
+					} else {
+						for {
+							t, alive = context.next_token_line_aware()
+							if !alive || t.token_type == KEYWORD && (t.value == "END" || t.value == "ELSE") {
+								break
+							}
+						}
+						if !alive {
+							err := errors.New("IF: Expected END or ELSE")
+							return nil, nil, err
+						}
+						if t.token_type == KEYWORD && t.value == "END" {
+							context.rss_pop()
+						} else {
+							st.In_condition = true
+							t, alive = context.next_token_line_aware()
+						}
+					}
+				} else {
+					t, alive = context.next_token_line_aware()
+				}
+			} else {
+				t, alive = context.next_token_line_aware()
+			}
 		} else {
 			get_next_token = true
 		}
@@ -303,9 +365,9 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 				}
 				if stopped_tkn != nil {
 					if stopped_tkn.token_type == DELIMITER_SEMICOLON ||
-						(context.peek_top_run_state_stack() == RUN_STATE_IF && stopped_tkn.token_type == KEYWORD && stopped_tkn.value == "END") ||
-						(context.peek_top_run_state_stack() == RUN_STATE_IF && stopped_tkn.token_type == KEYWORD && stopped_tkn.value == "ELSE") ||
-						(context.peek_top_run_state_stack() == RUN_STATE_IF && stopped_tkn.token_type == KEYWORD && stopped_tkn.value == "THEN") ||
+						(context.rss_peek_type(0) == RUN_STATE_IF && stopped_tkn.token_type == KEYWORD && stopped_tkn.value == "END") ||
+						(context.rss_peek_type(0) == RUN_STATE_IF && stopped_tkn.token_type == KEYWORD && stopped_tkn.value == "ELSE") ||
+						(context.rss_peek_type(0) == RUN_STATE_IF && stopped_tkn.token_type == KEYWORD && stopped_tkn.value == "THEN") ||
 						stopped_tkn.token_type == DELIMITER_EOL {
 						stopped_token = stopped_tkn
 						break
@@ -413,7 +475,7 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 				context.user_variables[var_name] = user_var
 				return user_var, stopped_token, nil
 			}
-			if context.ess_peek(0).Get_type() == EXEC_STATE_OPERATOR_MATHEMATICAL {
+			if context.ess_peek(0) != nil && context.ess_peek(0).Get_type() == EXEC_STATE_OPERATOR_MATHEMATICAL {
 				// stop here
 				if state.Get_type() == EXEC_STATE_USER_VAR {
 					return state.(Exec_state_user_var).Variable, t, nil
@@ -436,6 +498,10 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 		case KEYWORD:
 			switch t.value {
 			case "GOTO":
+				if context.is_in_if() {
+					e := errors.New("GOTO: NOT ALLOWED IN MULTILINE IF")
+					return nil, nil, e
+				}
 				// Get the next token
 				t, _ := context.next_token_line_aware()
 				if t.token_type != NUMBER {
@@ -449,17 +515,51 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 					return nil, nil, e
 				}
 				context.program_counter = idx
+				// drain the channel so we don't leak goros
+				for t.token_type != DELIMITER_EOL {
+					tkn := <-context.tokeniser_channel
+					t = &tkn
+				}
 				context.tokeniser_channel = make(chan Token)
 				go context.tokenise_line(context.program[context.program_counter].line)
 				return nil, nil, nil
-			case "THEN", "END", "ELSE":
+			case "THEN":
 				if state != nil {
 					return state.(Exec_state_user_var).Variable, t, nil
 				}
 				return nil, t, nil
+			case "ELSE":
+				if context.is_in_if() {
+					if context.rss_peek(0).(*Run_state_if).In_condition && context.rss_peek(0).(*Run_state_if).Result {
+						// we're in the true part of the if, so skip to the end
+						for {
+							t, alive = context.next_token_line_aware()
+							if !alive || t.token_type == KEYWORD && t.value == "END" {
+								break
+							}
+						}
+						if !alive {
+							err := errors.New("ELSE: Expected END")
+							return nil, nil, err
+						}
+						context.rss_pop()
+						return nil, t, nil
+					}
+				} else {
+					e := errors.New("ELSE: NOT IN IF")
+					return nil, nil, e
+				}
+			case "END":
+				if context.is_in_if() {
+					context.rss_pop()
+					return nil, t, nil
+				}
 			case "IF":
-				_, err := context.handle_if()
-				return nil, nil, err
+				stop, err := context.handle_if()
+				if err != nil {
+					return nil, nil, err
+				}
+				return nil, stop, nil
 			case "LET":
 				stop, err := context.handle_let()
 				if err != nil {
@@ -503,9 +603,7 @@ func (context *Context) handle_let() (*Token, error) {
 }
 
 func (context *Context) handle_if() (*Token, error) {
-	st := Run_state_if{}
-	st.Condition_pc = context.program_counter
-	context.run_state_stack = append(context.run_state_stack, st)
+	st := &Run_state_if{}
 	// eval condition
 	condition, stopped_token, err := context.execute_statement()
 	if err != nil {
@@ -515,69 +613,21 @@ func (context *Context) handle_if() (*Token, error) {
 		e := errors.New("IF: Expected THEN")
 		return nil, e
 	}
-	hit_end := false
-	cnd_val := condition.(variable.VARTYPE_NUMBER).Value().(float64)
-	if cnd_val == 1 {
-		// Keep executing until ELSE or END
-		for {
-			_, t, err := context.execute_statement()
-			if err != nil {
-				return nil, err
-			}
-			if t.token_type == KEYWORD {
-				if t.value == "ELSE" {
-					break
-				}
-				if t.value == "END" {
-					hit_end = true
-					break
-				}
-			}
-		}
-	} else {
-		// Skip to ELSE or END
-		for !hit_end {
-			t, _ := context.next_token_line_aware()
-			if t.token_type == DELIMITER_EOL {
-				continue
-			}
-			if t.token_type == KEYWORD {
-				if t.value == "ELSE" {
-					// execute until end
-					for {
-						_, stopped_token, err := context.execute_statement()
-						if err != nil {
-							return nil, err
-						}
-						if stopped_token.token_type == KEYWORD && stopped_token.value == "END" {
-							hit_end = true
-							break
-						}
-					}
-				} else if t.value == "END" {
-					hit_end = true
-					break
-				}
-			}
-		}
-	}
+	context.rss_push(st)
+	st.Touch = 0
+	cnd_val, ok := condition.(variable.VARTYPE_NUMBER).Value().(float64)
 
-	if !hit_end {
-		// Skip to END
-		for {
-			t, neof := context.next_token_line_aware()
-			if !neof {
-				e := errors.New("IF: Expected END")
-				return nil, e
-			}
-			if t.token_type == KEYWORD && t.value == "END" {
-				break
-			}
-		}
+	if !ok {
+		e := errors.New("IF ON LINE " + strconv.Itoa(context.program[context.program_counter].line_number) + ": RESULT NOT BOOL")
+		return nil, e
 	}
-	// pop the stack
-	context.run_state_stack = context.run_state_stack[:len(context.run_state_stack)-1]
-	return nil, nil
+	if cnd_val != 0 && cnd_val != 1 {
+		e := errors.New("IF ON LINE " + strconv.Itoa(context.program[context.program_counter].line_number) + ": RESULT NOT BOOL")
+		return nil, e
+	}
+	st.Result = cnd_val == 1
+	st.In_condition = false
+	return stopped_token, err
 }
 
 func (context *Context) get_idx_of_line_no(line_no int) int {

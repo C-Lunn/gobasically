@@ -20,11 +20,9 @@ func (r Run_state_normal) Get_state() RUN_STATE {
 }
 
 type Run_state_if struct {
-	Condition_pc    int
-	Else_pc         int
-	End_pc          int
-	Result          bool
-	Needs_condition bool
+	Result       bool
+	In_condition bool
+	Touch        int
 }
 
 func (r Run_state_if) Get_state() RUN_STATE {

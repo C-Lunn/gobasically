@@ -5,7 +5,6 @@ import (
 	"basicallygo/terminal"
 	"bufio"
 	"os"
-	"os/signal"
 	"strings"
 )
 
@@ -34,7 +33,7 @@ func main() {
 	interrupt_bool := make(chan bool)
 	quit := make(chan bool)
 
-	signal.Notify(interrupt, os.Interrupt)
+	//signal.Notify(interrupt, os.Interrupt)
 
 	go func() {
 		for {
@@ -53,12 +52,22 @@ func main() {
 
 func repl(interrupt chan bool, quit chan bool, cont *context.Context) {
 	prog :=
-		`10 LET A = 1
-20 LET B = 2
-30 LET C = A + B
-35 C = C + 1
-36 IF C % 2 == 0 THEN PRINT C, "IS EVEN" ELSE PRINT C, "IS ODD" END
-50 GOTO 35`
+		`10 LET A = 0
+20 IF A % 15 == 0 THEN
+30     PRINT "FIZZBUZZ"
+40 ELSE
+50     IF A % 3 == 0 THEN
+60         PRINT "FIZZ"
+70     ELSE
+80         IF A % 5 == 0 THEN
+90             PRINT "BUZZ"
+100        ELSE
+110            PRINT A
+120        END
+130    END
+140 END
+150 A = A + 1
+160 IF A < 100 THEN GOTO 20 END`
 	// split prog
 	lines := strings.Split(prog, "\n")
 	for _, line := range lines {
