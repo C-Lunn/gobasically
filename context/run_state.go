@@ -30,5 +30,11 @@ func (r Run_state_if) Get_state() RUN_STATE {
 }
 
 type Run_state_for struct {
-	First_pc int
+	First_pc       int
+	Variable       string
+	Post_loop_func func(string) bool
+}
+
+func (r Run_state_for) Get_state() RUN_STATE {
+	return RUN_STATE_FOR
 }

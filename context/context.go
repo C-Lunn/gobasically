@@ -5,6 +5,7 @@ import (
 	"basicallygo/terminal"
 	"basicallygo/variable"
 	"errors"
+	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
@@ -158,6 +159,10 @@ func (context *Context) tokenise_line(line string) {
 		for {
 			if line[str_offset] == ' ' {
 				str_offset++
+				if str_offset >= len(line) {
+					ch <- Token{token_type: DELIMITER_EOL, value: ""}
+					return
+				}
 			} else {
 				break
 			}
@@ -394,10 +399,9 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 			continue
 		case USER_VAR_UNASSIGNED:
 			// If state hasn't been initialised, then it's the first (or maybe only) user var
-			if state == nil {
-				state = Exec_state_unassigned{Variable: t.value}
-			}
-			continue
+			line_no := context.program[context.program_counter].line_number
+			err := errors.New("LINE " + fmt.Sprintf("%d", line_no) + " UNEXPECTED IDENTIFIER: " + t.value)
+			return nil, nil, err
 		case NUMBER:
 			// Get the number
 			if state == nil {
@@ -566,9 +570,121 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 					return nil, nil, err
 				}
 				return nil, stop, nil
+			case "FOR":
+				stop, err := context.handle_for()
+				if err != nil {
+					return nil, nil, err
+				}
+				return nil, stop, nil
+			case "NEXT":
+				if context.rss_peek_type(0) != RUN_STATE_FOR {
+					e := errors.New("NEXT: NOT IN FOR")
+					return nil, nil, e
+				}
+				st := context.rss_peek(0).(*Run_state_for)
+				// increment the variable
+				if st.Post_loop_func(st.Variable) {
+					// loop again
+					context.program_counter = st.First_pc
+					return nil, nil, nil
+				} else {
+					context.rss_pop()
+					return nil, nil, nil
+				}
+			case "TO", "STEP":
+				if state != nil {
+					return state.(Exec_state_user_var).Variable, t, nil
+				}
+				return nil, t, nil
 			}
 		}
 	}
+}
+
+func (context *Context) handle_for() (*Token, error) {
+	// Get the next token
+	s := &Run_state_for{
+		First_pc: context.program_counter,
+	}
+	context.rss_push(s)
+	t, _ := context.next_token_line_aware()
+	if t.token_type != USER_VAR_UNASSIGNED {
+		e := errors.New("FOR: EXPECTED UNASSIGNED VARIABLE NAME")
+		return nil, e
+	}
+	v_name := t.value
+	// Get the next token
+	t, _ = context.next_token_line_aware()
+	if t.token_type != OPERATOR || t.value != "=" {
+		e := errors.New("FOR: EXPECTED =")
+		return nil, e
+	}
+	res, stop, err := context.execute_statement()
+	if err != nil {
+		return nil, err
+	}
+	if res == nil {
+		e := errors.New("FOR: EXPECTED AN EXPRESSION")
+		return nil, e
+	}
+	if res.Type_of() != variable.NUMBER {
+		e := errors.New("FOR: EXPECTED A NUMBER")
+		return nil, e
+	}
+	// add the variable to the user variables
+	context.user_variables[v_name] = res
+	s.Variable = v_name
+	if stop.token_type != KEYWORD || stop.value != "TO" {
+		e := errors.New("FOR: EXPECTED TO")
+		return nil, e
+	}
+	stop_val, stop, err := context.execute_statement()
+	if err != nil {
+		return nil, err
+	}
+	if stop_val == nil {
+		e := errors.New("FOR: EXPECTED AN EXPRESSION")
+		return nil, e
+	}
+	if stop_val.Type_of() != variable.NUMBER {
+		e := errors.New("FOR: EXPECTED A NUMBER")
+		return nil, e
+	}
+	post_loop_inc := 1.0
+	if stop.token_type == KEYWORD || stop.value == "STEP" {
+		step_val, stop, err := context.execute_statement()
+		if err != nil {
+			return nil, err
+		}
+		if step_val == nil {
+			e := errors.New("FOR TO: EXPECTED AN EXPRESSION")
+			return nil, e
+		}
+		if step_val.Type_of() != variable.NUMBER {
+			e := errors.New("FOR TO: EXPECTED A NUMBER")
+			return nil, e
+		}
+		post_loop_inc = step_val.Value().(float64)
+		if stop.token_type != DELIMITER_EOL {
+			e := errors.New("FOR: EXPECTED NEWLINE AFTER STEP")
+			return nil, e
+		}
+	} else if stop.token_type != DELIMITER_EOL {
+		e := errors.New("FOR: EXPECTED NEWLINE")
+		return nil, e
+	}
+
+	s.Post_loop_func = func(var_name string) bool {
+		current := context.user_variables[var_name].Value().(float64)
+		context.user_variables[var_name] = variable.VARTYPE_NUMBER{}.New(current + post_loop_inc)
+		current = context.user_variables[var_name].Value().(float64)
+		if post_loop_inc > 0 {
+			return current <= stop_val.Value().(float64)
+		} else {
+			return current >= stop_val.Value().(float64)
+		}
+	}
+	return stop, nil
 }
 
 func (context *Context) handle_let() (*Token, error) {

@@ -9,8 +9,8 @@ import (
 )
 
 func main() {
-	// 	prog :=
-	// 		`10 GOTO 60
+	//     prog :=
+	//         `10 GOTO 60
 	// 20 PRINT "HELLO"
 	// 30 GOTO 20
 	// 40 PRINT "WORLD"
@@ -52,22 +52,21 @@ func main() {
 
 func repl(interrupt chan bool, quit chan bool, cont *context.Context) {
 	prog :=
-		`10 LET A = 0
-20 IF A % 15 == 0 THEN
-30     PRINT "FIZZBUZZ"
-40 ELSE
-50     IF A % 3 == 0 THEN
-60         PRINT "FIZZ"
-70     ELSE
-80         IF A % 5 == 0 THEN
-90             PRINT "BUZZ"
-100        ELSE
-110            PRINT A
-120        END
-130    END
-140 END
-150 A = A + 1
-160 IF A < 100 THEN GOTO 20 END`
+		`10 FOR I = 1 TO 100 STEP 1
+20         IF I % 15 == 0 THEN
+21            PRINT "FIZZBUZZ"
+30         ELSE 
+31            IF I % 3 == 0 THEN
+32                  PRINT "FIZZ"
+40            ELSE
+41                IF I % 5 == 0 THEN 
+42                    PRINT "BUZZ"
+50                 ELSE 
+51                    PRINT I 
+52                END
+53            END 
+54        END
+60 NEXT`
 	// split prog
 	lines := strings.Split(prog, "\n")
 	for _, line := range lines {
