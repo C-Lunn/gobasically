@@ -83,7 +83,7 @@ func read_rest_of_string(s string, offset int) (string, int) {
 
 func read_until_next_non_alpha(s string, offset int) (string, int) {
 	for i := offset; i < len(s); i++ {
-		if s[i] < 'A' || s[i] > 'z' {
+		if s[i] < 'A' || s[i] > 'z' || s[i] == '_' || s[i] == '^' || s[i] == ']' || s[i] == '[' || s[i] == '`' || s[i] == '\\' {
 			return s[offset:i], i
 		}
 	}

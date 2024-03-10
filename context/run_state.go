@@ -15,7 +15,7 @@ type Run_state interface {
 type Run_state_normal struct {
 }
 
-func (r Run_state_normal) Get_state() RUN_STATE {
+func (r *Run_state_normal) Get_state() RUN_STATE {
 	return RUN_STATE_NORMAL
 }
 
@@ -25,7 +25,7 @@ type Run_state_if struct {
 	Touch        int
 }
 
-func (r Run_state_if) Get_state() RUN_STATE {
+func (r *Run_state_if) Get_state() RUN_STATE {
 	return RUN_STATE_IF
 }
 
@@ -35,6 +35,6 @@ type Run_state_for struct {
 	Post_loop_func func(string) bool
 }
 
-func (r Run_state_for) Get_state() RUN_STATE {
+func (r *Run_state_for) Get_state() RUN_STATE {
 	return RUN_STATE_FOR
 }

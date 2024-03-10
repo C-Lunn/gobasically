@@ -19,7 +19,7 @@ func LOG(term *terminal.Terminal, arguments []variable.User_variable) (variable.
 
 	res := math.Log(a)
 
-	return variable.VARTYPE_NUMBER{}.New(res), nil
+	return (&variable.VARTYPE_NUMBER{}).New(res), nil
 }
 
 func SQR(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
@@ -33,7 +33,7 @@ func SQR(term *terminal.Terminal, arguments []variable.User_variable) (variable.
 
 	res := math.Sqrt(a)
 
-	return variable.VARTYPE_NUMBER{}.New(res), nil
+	return (&variable.VARTYPE_NUMBER{}).New(res), nil
 }
 
 func SIN(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
@@ -47,7 +47,7 @@ func SIN(term *terminal.Terminal, arguments []variable.User_variable) (variable.
 
 	res := math.Sin(a)
 
-	return variable.VARTYPE_NUMBER{}.New(res), nil
+	return (&variable.VARTYPE_NUMBER{}).New(res), nil
 }
 
 func COS(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
@@ -61,7 +61,7 @@ func COS(term *terminal.Terminal, arguments []variable.User_variable) (variable.
 
 	res := math.Cos(a)
 
-	return variable.VARTYPE_NUMBER{}.New(res), nil
+	return (&variable.VARTYPE_NUMBER{}).New(res), nil
 }
 
 func TAN(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
@@ -75,7 +75,7 @@ func TAN(term *terminal.Terminal, arguments []variable.User_variable) (variable.
 
 	res := math.Tan(a)
 
-	return variable.VARTYPE_NUMBER{}.New(res), nil
+	return (&variable.VARTYPE_NUMBER{}).New(res), nil
 }
 
 func ABS(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
@@ -89,7 +89,7 @@ func ABS(term *terminal.Terminal, arguments []variable.User_variable) (variable.
 
 	res := math.Abs(a)
 
-	return variable.VARTYPE_NUMBER{}.New(res), nil
+	return (&variable.VARTYPE_NUMBER{}).New(res), nil
 }
 
 func EXP(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
@@ -103,7 +103,7 @@ func EXP(term *terminal.Terminal, arguments []variable.User_variable) (variable.
 
 	res := math.Exp(a)
 
-	return variable.VARTYPE_NUMBER{}.New(res), nil
+	return (&variable.VARTYPE_NUMBER{}).New(res), nil
 }
 
 func VAL(term *terminal.Terminal, arguments []variable.User_variable) (variable.User_variable, error) {
@@ -121,5 +121,5 @@ func VAL(term *terminal.Terminal, arguments []variable.User_variable) (variable.
 		return nil, err
 	}
 
-	return variable.VARTYPE_NUMBER{}.New(res), nil
+	return (&variable.VARTYPE_NUMBER{}).New(res), nil
 }

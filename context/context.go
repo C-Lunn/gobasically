@@ -224,8 +224,8 @@ func (context *Context) tokenise_line(line string) {
 			continue
 		}
 		// Check if it's a std function
-		if _, ok := functions.Std_fcns[word]; ok {
-			ch <- Token{token_type: STD_FCN, value: word}
+		if _, ok := functions.Std_fcns[strings.ToUpper(word)]; ok {
+			ch <- Token{token_type: STD_FCN, value: strings.ToUpper(word)}
 			str_offset = new_offset
 			continue
 		}
@@ -336,7 +336,7 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 		}
 		if !alive || t.token_type == DELIMITER_EOL {
 			if state != nil {
-				return state.(Exec_state_user_var).Variable, t, nil
+				return state.(*Exec_state_user_var).Variable, t, nil
 			}
 			if t == nil {
 				return nil, nil, nil
@@ -352,10 +352,10 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 				e := errors.New("STD_FCN: Expected a delimiter")
 				return nil, nil, e
 			}
-			state = Exec_state_Fcn{Fcn: functions.Std_fcns[t.value]}
+			state = &Exec_state_Fcn{Fcn: functions.Std_fcns[t.value]}
 			context.ess_push(state)
 			defer context.ess_pop()
-			fcn_state := state.(Exec_state_Fcn)
+			fcn_state := state.(*Exec_state_Fcn)
 			// slice for the arguments
 			fcn_state.Args = make([]variable.User_variable, 0)
 			// Evaluate each argument until ; or line end
@@ -385,8 +385,6 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 			}
 			// Execute the function
 			result, _ := fcn_state.Fcn(context.terminal, fcn_state.Args)
-			// There's got to be a more idiomatic way to do this. If I change it to *User_variable, strings and numbers don't work any more
-			// I'm probably missing something obvious
 			if result != nil {
 				return result, stopped_token, nil
 			}
@@ -394,7 +392,7 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 		case USER_VAR:
 			// If state hasn't been initialised, then it's the first (or maybe only) user var
 			if state == nil {
-				state = Exec_state_user_var{Variable: context.user_variables[t.value], Name: t.value}
+				state = &Exec_state_user_var{Variable: context.user_variables[t.value]}
 			}
 			continue
 		case USER_VAR_UNASSIGNED:
@@ -405,18 +403,57 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 		case NUMBER:
 			// Get the number
 			if state == nil {
-				state = Exec_state_user_var{Variable: variable.VARTYPE_NUMBER{}.From_string(t.value)}
+				v := &variable.VARTYPE_NUMBER{}
+				v = v.From_string(t.value)
+				state = &Exec_state_user_var{Variable: v}
 			}
 			continue
 		case STRING:
 			// Get the string
 			if state == nil {
-				state = Exec_state_user_var{Variable: variable.VARTYPE_STRING{}.New(t.value)}
+				state = &Exec_state_user_var{Variable: (&variable.VARTYPE_STRING{}).New(t.value)}
 			}
 			continue
-		case DELIMITER_COMMA, DELIMITER_SEMICOLON:
+		case DELIMITER_COMMA, DELIMITER_SEMICOLON, DELIMITER_RBRACKET, DELIMITER_RSQUARE:
 			if state != nil {
-				return state.(Exec_state_user_var).Variable, t, nil
+				return state.(*Exec_state_user_var).Variable, t, nil
+			}
+		case DELIMITER_LSQUARE:
+			if state == nil {
+				e := errors.New("[: EXPECTED EXPRESSION")
+				return nil, nil, e
+			}
+			if state.Get_type() == EXEC_STATE_USER_VAR {
+				st := state.(*Exec_state_user_var)
+				if st.Variable.Type_of() != variable.ARRAY {
+					e := errors.New(st.Variable.To_string() + ": NOT AN ARRAY")
+					return nil, nil, e
+				}
+				// Get the next token
+				res, stop, err := context.execute_statement()
+				if err != nil {
+					return nil, nil, err
+				}
+				if res == nil {
+					e := errors.New("[: EXPECTED EXPRESSION")
+					return nil, nil, e
+				}
+				if res.Type_of() != variable.NUMBER {
+					e := errors.New("[: EXPECTED A NUMBER")
+					return nil, nil, e
+				}
+				if stop.token_type != DELIMITER_RSQUARE {
+					e := errors.New("[: EXPECTED ]")
+					return nil, nil, e
+				}
+				st.Variable = st.Variable.(*variable.VARTYPE_ARRAY).Get(int(res.Value().(float64)))
+				// Get next token
+				t, alive = context.next_token_line_aware()
+				if !alive || t.token_type == DELIMITER_EOL {
+					return st.Variable, t, nil
+				}
+				get_next_token = false
+				continue
 			}
 		case OPERATOR_MATHEMATICAL:
 			if state == nil && t.value == "-" {
@@ -424,7 +461,7 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 				// Check if the next token is a number
 				next_tkn, _ := context.next_token_line_aware()
 				if next_tkn.token_type == NUMBER {
-					state = Exec_state_user_var{Variable: variable.VARTYPE_NUMBER{}.From_string("-" + next_tkn.value)}
+					state = &Exec_state_user_var{Variable: (&variable.VARTYPE_NUMBER{}).From_string("-" + next_tkn.value)}
 					continue
 				}
 			}
@@ -432,26 +469,28 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 				e := errors.New("OPERATOR_MATHEMATICAL: Expected a variable")
 				return nil, nil, e
 			}
-			state = Exec_state_operator_mathematical{}.From_user_var(state.(Exec_state_user_var), t.value)
-			context.ess_push(state)
+			new_state := (&Exec_state_operator_mathematical{}).From_user_var(state.(*Exec_state_user_var), t.value)
+			context.ess_push(new_state)
 			defer context.ess_pop()
 			user_var, stopped_token, err := context.execute_statement()
 			if err != nil {
 				return nil, nil, err
 			}
 			// execute the operator
-			op_state := state.(Exec_state_operator_mathematical)
-			result, _ := op_state.Operator_func(op_state.Left, user_var)
-			state = Exec_state_user_var{Variable: result}
-			context.ess_replace_top(state)
+			result, _ := new_state.Operator_func(new_state.Left, user_var)
+			o_state := &Exec_state_user_var{Variable: result}
+			context.ess_replace_top(o_state)
+			state = o_state
 			if stopped_token != nil {
 				if stopped_token.token_type == OPERATOR {
 					get_next_token = false
 					t = stopped_token
 					continue
 				} else {
-					return result, stopped_token, nil
+					return result, nil, nil
 				}
+			} else {
+				return result, nil, nil
 			}
 		case OPERATOR:
 			if t.value == "=" {
@@ -465,8 +504,7 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 					e := errors.New("= Expected an assigned variable")
 					return nil, nil, e
 				}
-				st := state.(Exec_state_user_var)
-				var_name := st.Name
+				st := state.(*Exec_state_user_var)
 				// Evaluate RHS
 				user_var, stopped_token, err := context.execute_statement()
 				if err != nil {
@@ -476,18 +514,18 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 					e := errors.New("= Expected an expression")
 					return nil, nil, e
 				}
-				context.user_variables[var_name] = user_var
+				st.Variable.Set(user_var.Value())
 				return user_var, stopped_token, nil
 			}
 			if context.ess_peek(0) != nil && context.ess_peek(0).Get_type() == EXEC_STATE_OPERATOR_MATHEMATICAL {
 				// stop here
 				if state.Get_type() == EXEC_STATE_USER_VAR {
-					return state.(Exec_state_user_var).Variable, t, nil
+					return state.(*Exec_state_user_var).Variable, t, nil
 				}
 				return nil, t, nil
 			}
 
-			state = Exec_state_operator{}.From_user_var(state.(Exec_state_user_var), t.value)
+			state = (&Exec_state_operator{}).From_user_var(state.(*Exec_state_user_var), t.value)
 			context.ess_push(state)
 			defer context.ess_pop()
 			// evaluate for the rhs
@@ -496,7 +534,7 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 				return nil, nil, err
 			}
 			// execute the operator
-			op_state := state.(Exec_state_operator)
+			op_state := state.(*Exec_state_operator)
 			result, _ := op_state.Operator_func(op_state.Left, user_var)
 			return result, stopped_token, nil
 		case KEYWORD:
@@ -529,7 +567,7 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 				return nil, nil, nil
 			case "THEN":
 				if state != nil {
-					return state.(Exec_state_user_var).Variable, t, nil
+					return state.(*Exec_state_user_var).Variable, t, nil
 				}
 				return nil, t, nil
 			case "ELSE":
@@ -588,17 +626,67 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 					context.program_counter = st.First_pc
 					return nil, nil, nil
 				} else {
+					delete(context.user_variables, st.Variable)
 					context.rss_pop()
 					return nil, nil, nil
 				}
 			case "TO", "STEP":
 				if state != nil {
-					return state.(Exec_state_user_var).Variable, t, nil
+					return state.(*Exec_state_user_var).Variable, t, nil
 				}
 				return nil, t, nil
+			case "DIM":
+				stop, err := context.handle_dim()
+				if err != nil {
+					return nil, nil, err
+				}
+				return nil, stop, nil
 			}
 		}
 	}
+}
+
+func (context *Context) handle_dim() (*Token, error) {
+	// Get the next token
+	t, _ := context.next_token_line_aware()
+	if t.token_type != USER_VAR_UNASSIGNED {
+		e := errors.New("DIM: Expected a variable name")
+		return nil, e
+	}
+	var_name := t.value
+	// Get the next token
+	t, _ = context.next_token_line_aware()
+	if t.token_type != DELIMITER_LBRACKET {
+		e := errors.New("DIM: Expected (")
+		return nil, e
+	}
+	// Get the next token
+	dimensions := make([]int, 0)
+	for {
+		res, stop, err := context.execute_statement()
+		if err != nil {
+			return nil, err
+		}
+		if res == nil {
+			e := errors.New("DIM: Expected an expression")
+			return nil, e
+		}
+		if res.Type_of() != variable.NUMBER {
+			e := errors.New("DIM: Expected a number")
+			return nil, e
+		}
+		dimensions = append(dimensions, int(res.Value().(float64)))
+		if stop.token_type == DELIMITER_COMMA {
+			continue
+		}
+		if stop.token_type == DELIMITER_RBRACKET {
+			break
+		}
+		e := errors.New("DIM: Expected , or )")
+		return nil, e
+	}
+	context.user_variables[var_name] = (&variable.VARTYPE_ARRAY{}).New(dimensions...)
+	return t, nil
 }
 
 func (context *Context) handle_for() (*Token, error) {
@@ -676,10 +764,10 @@ func (context *Context) handle_for() (*Token, error) {
 
 	s.Post_loop_func = func(var_name string) bool {
 		current := context.user_variables[var_name].Value().(float64)
-		context.user_variables[var_name] = variable.VARTYPE_NUMBER{}.New(current + post_loop_inc)
+		context.user_variables[var_name] = (&variable.VARTYPE_NUMBER{}).New(current + post_loop_inc)
 		current = context.user_variables[var_name].Value().(float64)
 		if post_loop_inc > 0 {
-			return current <= stop_val.Value().(float64)
+			return current < stop_val.Value().(float64)
 		} else {
 			return current >= stop_val.Value().(float64)
 		}
@@ -731,7 +819,7 @@ func (context *Context) handle_if() (*Token, error) {
 	}
 	context.rss_push(st)
 	st.Touch = 0
-	cnd_val, ok := condition.(variable.VARTYPE_NUMBER).Value().(float64)
+	cnd_val, ok := condition.(*variable.VARTYPE_NUMBER).Value().(float64)
 
 	if !ok {
 		e := errors.New("IF ON LINE " + strconv.Itoa(context.program[context.program_counter].line_number) + ": RESULT NOT BOOL")
@@ -769,6 +857,7 @@ func (context *Context) Run(interrupt chan bool, done chan bool) {
 	context.user_variables = make(map[string]variable.User_variable)
 	context.sort_program()
 	context.program_counter = 0
+	context.tokeniser_channel = make(chan Token)
 	go context.tokenise_line(context.program[context.program_counter].line)
 	for context.program_counter < len(context.program) {
 		select {

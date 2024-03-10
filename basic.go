@@ -51,22 +51,20 @@ func main() {
 }
 
 func repl(interrupt chan bool, quit chan bool, cont *context.Context) {
-	prog :=
-		`10 FOR I = 1 TO 100 STEP 1
-20         IF I % 15 == 0 THEN
-21            PRINT "FIZZBUZZ"
-30         ELSE 
-31            IF I % 3 == 0 THEN
-32                  PRINT "FIZZ"
-40            ELSE
-41                IF I % 5 == 0 THEN 
-42                    PRINT "BUZZ"
-50                 ELSE 
-51                    PRINT I 
-52                END
-53            END 
-54        END
-60 NEXT`
+	prog := `10 DIM A(2,2)
+20 A[0][0] = 1
+30 A[1][1] = 2
+40 A[1][0] = "CHURGER"
+70 FOR I = 0 TO 2
+80 FOR J = 0 TO 2
+90 PRINT A[I][J]
+100 NEXT
+110 NEXT
+`
+	// 	prog := `10 LET A = 1
+	// 20 A = A + 1
+	// 30 PRINT A
+	// `
 	// split prog
 	lines := strings.Split(prog, "\n")
 	for _, line := range lines {
