@@ -97,6 +97,9 @@ CalBASIC provides a small library of standard functions:
 - `TAN(x)`: Returns the tangent of `x`
 - `VAL(x)`: Returns the numerical value of `x`
 - `PRINT(x)`: Prints `x` to the screen
+- `LEN(x)`:
+    - If `x` is a string, returns the length of `x`
+    - If `x` is an array, returns the length of the first dimension of `x`
 
 ## Operators
 CalBASIC supports the following operators:
