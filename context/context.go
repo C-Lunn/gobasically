@@ -261,11 +261,22 @@ func (context *Context) is_in_if() bool {
  * Returns when a delimiter is seen (i.e. semicolon, comma, or line end)
  * Idea is that it's called recursively
  */
-func (context *Context) execute_statement() (variable.User_variable, *Token, error) {
+func (context *Context) execute_statement(get_next ...interface{}) (variable.User_variable, *Token, error) {
 	var state Exec_state
 	get_next_token := true
 	var t *Token
-	var alive bool
+	alive := true
+	if len(get_next) > 0 {
+		get_next_token = get_next[0].(bool)
+		if len(get_next) == 2 && !get_next_token {
+			t = get_next[1].(*Token)
+			if t == nil {
+				return nil, nil, nil
+			}
+		} else if !get_next_token {
+			return nil, nil, errors.New("INTERNAL ERROR")
+		}
+	}
 	for {
 		if get_next_token {
 			if context.is_in_if() {
@@ -334,9 +345,15 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 		} else {
 			get_next_token = true
 		}
-		if !alive || t.token_type == DELIMITER_EOL {
+		if t == nil || !alive || t.token_type == DELIMITER_EOL {
 			if state != nil {
-				return state.(*Exec_state_user_var).Variable, t, nil
+				state_as_user_var, ok := state.(*Exec_state_user_var)
+				if ok {
+					return state_as_user_var.Variable, t, nil
+				} else {
+					return nil, t, nil
+				}
+
 			}
 			if t == nil {
 				return nil, nil, nil
@@ -354,14 +371,19 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 			}
 			state = &Exec_state_Fcn{Fcn: functions.Std_fcns[t.value]}
 			context.ess_push(state)
-			defer context.ess_pop()
 			fcn_state := state.(*Exec_state_Fcn)
 			// slice for the arguments
 			fcn_state.Args = make([]variable.User_variable, 0)
-			// Evaluate each argument until ; or line end
+			// Evaluate each argument until ;, ), or line end
 			var stopped_token *Token
+			got_open_bracket := false
+			// Peek the next token to check if it's (
+			peek_tkn, _ := context.next_token_line_aware()
+			if peek_tkn.token_type == DELIMITER_LBRACKET {
+				got_open_bracket = true
+			}
 			for {
-				user_var, stopped_tkn, err := context.execute_statement()
+				user_var, stopped_tkn, err := context.execute_statement(got_open_bracket, peek_tkn)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -373,7 +395,8 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 						(context.rss_peek_type(0) == RUN_STATE_IF && stopped_tkn.token_type == KEYWORD && stopped_tkn.value == "END") ||
 						(context.rss_peek_type(0) == RUN_STATE_IF && stopped_tkn.token_type == KEYWORD && stopped_tkn.value == "ELSE") ||
 						(context.rss_peek_type(0) == RUN_STATE_IF && stopped_tkn.token_type == KEYWORD && stopped_tkn.value == "THEN") ||
-						stopped_tkn.token_type == DELIMITER_EOL {
+						stopped_tkn.token_type == DELIMITER_EOL ||
+						(got_open_bracket && stopped_tkn.token_type == DELIMITER_RBRACKET) {
 						stopped_token = stopped_tkn
 						break
 					} else if stopped_tkn.token_type == DELIMITER_COMMA {
@@ -386,9 +409,21 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 			// Execute the function
 			result, _ := fcn_state.Fcn(context.terminal, fcn_state.Args)
 			if result != nil {
-				return result, stopped_token, nil
+				s := &Exec_state_user_var{Variable: result}
+				context.ess_replace_top(s)
+				state = s
+				defer context.ess_pop()
+			} else {
+				t = stopped_token
+				context.ess_pop()
 			}
-			return nil, stopped_token, nil
+			if got_open_bracket && stopped_token.token_type == DELIMITER_RBRACKET {
+				// we DO want to get the next token so just continue
+				continue
+			} else {
+				get_next_token = false
+				continue
+			}
 		case USER_VAR:
 			// If state hasn't been initialised, then it's the first (or maybe only) user var
 			if state == nil {
@@ -418,6 +453,20 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 			if state != nil {
 				return state.(*Exec_state_user_var).Variable, t, nil
 			}
+		case DELIMITER_LBRACKET:
+			res, stop, err := context.execute_statement()
+			if err != nil {
+				return nil, nil, err
+			}
+			if res == nil {
+				e := errors.New("(: EXPECTED EXPRESSION")
+				return nil, nil, e
+			}
+			if stop.token_type != DELIMITER_RBRACKET {
+				e := errors.New("(: EXPECTED )")
+				return nil, nil, e
+			}
+			state = &Exec_state_user_var{Variable: res}
 		case DELIMITER_LSQUARE:
 			if state == nil {
 				e := errors.New("[: EXPECTED EXPRESSION")
@@ -425,11 +474,10 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 			}
 			if state.Get_type() == EXEC_STATE_USER_VAR {
 				st := state.(*Exec_state_user_var)
-				if st.Variable.Type_of() != variable.ARRAY {
-					e := errors.New(st.Variable.To_string() + ": NOT AN ARRAY")
+				if st.Variable.Type_of() != variable.ARRAY && st.Variable.Type_of() != variable.STRING {
+					e := errors.New(st.Variable.To_string() + ": NOT AN ARRAY OR STRING")
 					return nil, nil, e
 				}
-				// Get the next token
 				res, stop, err := context.execute_statement()
 				if err != nil {
 					return nil, nil, err
@@ -446,14 +494,33 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 					e := errors.New("[: EXPECTED ]")
 					return nil, nil, e
 				}
-				st.Variable = st.Variable.(*variable.VARTYPE_ARRAY).Get(int(res.Value().(float64)))
-				// Get next token
-				t, alive = context.next_token_line_aware()
-				if !alive || t.token_type == DELIMITER_EOL {
-					return st.Variable, t, nil
+				if st.Variable.Type_of() == variable.STRING {
+					if int(res.Value().(float64)) >= len(st.Variable.Value().(string)) {
+						e := errors.New("STRING INDEX OUT OF BOUNDS")
+						return nil, nil, e
+					}
+					st.Variable = (&variable.VARTYPE_STRING{}).New(string(st.Variable.Value().(string)[int(res.Value().(float64))]))
+					// Get next token
+					t, alive = context.next_token_line_aware()
+					if !alive || t.token_type == DELIMITER_EOL {
+						return st.Variable, t, nil
+					}
+					get_next_token = false
+					continue
+				} else {
+					if (int(res.Value().(float64))) >= st.Variable.(*variable.VARTYPE_ARRAY).Len() {
+						e := errors.New("ARRAY INDEX OUT OF BOUNDS")
+						return nil, nil, e
+					}
+					st.Variable = st.Variable.(*variable.VARTYPE_ARRAY).Get(int(res.Value().(float64)))
+					// Get next token
+					t, alive = context.next_token_line_aware()
+					if !alive || t.token_type == DELIMITER_EOL {
+						return st.Variable, t, nil
+					}
+					get_next_token = false
+					continue
 				}
-				get_next_token = false
-				continue
 			}
 		case OPERATOR_MATHEMATICAL:
 			if state == nil && t.value == "-" {
@@ -487,7 +554,7 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 					t = stopped_token
 					continue
 				} else {
-					return result, nil, nil
+					return result, stopped_token, nil
 				}
 			} else {
 				return result, nil, nil
@@ -641,6 +708,19 @@ func (context *Context) execute_statement() (variable.User_variable, *Token, err
 					return nil, nil, err
 				}
 				return nil, stop, nil
+			case "REM":
+				// Ignore all tokens until delim_eol
+				for {
+					t, alive = context.next_token_line_aware()
+					if !alive {
+						return nil, nil, nil
+					}
+					if t.token_type == DELIMITER_EOL {
+						get_next_token = false
+						break
+					}
+				}
+				continue
 			}
 		}
 	}

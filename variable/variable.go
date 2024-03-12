@@ -89,6 +89,10 @@ func (v *VARTYPE_ARRAY) To_string() string {
 	return result
 }
 
+func (v *VARTYPE_ARRAY) Len() int {
+	return v.length
+}
+
 func (v *VARTYPE_ARRAY) Type_of() VAR_TYPE {
 	return ARRAY
 }

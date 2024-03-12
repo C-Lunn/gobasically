@@ -13,6 +13,8 @@ type Operators map[string]Operator_fcn
 func ADD(left variable.User_variable, right variable.User_variable) (variable.User_variable, error) {
 	if left.Type_of() == variable.NUMBER && right.Type_of() == variable.NUMBER {
 		return (&variable.VARTYPE_NUMBER{}).New(left.Value().(float64) + right.Value().(float64)), nil
+	} else if left.Type_of() == variable.STRING && right.Type_of() == variable.STRING {
+		return (&variable.VARTYPE_STRING{}).New(left.Value().(string) + right.Value().(string)), nil
 	} else {
 		err := errors.New("ADD: Invalid types")
 		return nil, err

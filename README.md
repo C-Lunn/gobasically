@@ -29,7 +29,7 @@ The program will be interpreted like so:
 -> PRINT 38 ===> Print 38 to screen
 ```
 
-At the time of writing, this does mean that mathematical operators are evaluated right-to-left in a coalescing manner, but a future feature could be group mathematical operators together and then evaluate them according to BODMAS rules.
+At the time of writing, this does mean that mathematical operators are evaluated right-to-left in a coalescing manner (although brackets are respected), but a future feature could be group mathematical operators together and then evaluate them according to BODMAS rules.
 
 ## Types
 CalBASIC has 4 types:
@@ -126,13 +126,16 @@ The following bitwise operators are also supported:
 - [x] IF statements
 - [x] FOR loops
 - [x] Standard functions
- - [ ] LEN function
- - [ ] User Input
- - [ ] User keyboard monitoring
+    - [x] LEN function
+    - [ ] User Input
+    - [ ] User keyboard monitoring
 - [x] Arrays
- - [ ] LEN function
+    - [x] LEN function
 - [ ] User-defined Functions
 - [ ] CALFAX Terminal Control
- - [ ] CALFAX Terminal Graphics
+    - [ ] CALFAX Terminal Graphics
+- [x] String indexing
+- [x] String concatenation
+- [x] Comments
 
 User input may be a difficult one to achieve -- it seems that WASM-compiled Go blocks until the `run` function has returned. I am going to experiment with some callbacks.

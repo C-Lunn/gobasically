@@ -18,4 +18,5 @@ var Std_fcns Standard_functions = Standard_functions{
 	"ABS":   ABS,
 	"EXP":   EXP,
 	"VAL":   VAL,
+	"LEN":   LEN,
 }
