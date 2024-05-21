@@ -52,7 +52,7 @@ func main() {
 
 func repl(interrupt chan bool, quit chan bool, cont *context.Context) {
 	prog := `10 REM WHATEVER
-20 LET A = "HELLEAUGH"
+20 LET A = "HELLO"
 25 LET B = ""
 30 FOR I = 0 TO LEN(A) + 5
 41 PRINT A[I]

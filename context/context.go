@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type code_line struct {
@@ -26,6 +27,8 @@ type Context struct {
 	user_variables    map[string]variable.User_variable
 	tokeniser_channel chan Token
 	exec_state_stack  []Exec_state
+	Get_keys_down     func() []string
+	keys_down         []string
 }
 
 func New(
@@ -256,12 +259,39 @@ func (context *Context) is_in_if() bool {
 	return context.rss_peek_type(0) == RUN_STATE_IF
 }
 
+func (context *Context) keys_changed(new_keys []string) bool {
+	if len(new_keys) != len(context.keys_down) {
+		return true
+	}
+	sort.Strings(new_keys)
+	sort.Strings(context.keys_down)
+	for i, key := range new_keys {
+		if key != context.keys_down[i] {
+			return true
+		}
+	}
+	return false
+}
+
 /**
  * Execute a statement
  * Returns when a delimiter is seen (i.e. semicolon, comma, or line end)
  * Idea is that it's called recursively
  */
 func (context *Context) execute_statement(get_next ...interface{}) (variable.User_variable, *Token, error) {
+	// Ask the parent thread for which keys are down. WASM can't do multithreading so this is the best way I can think
+	// of without a complete re-write
+	// use sleep to yield this thread back to the webworker to allow it to process any keydown message
+	time.Sleep(1 * time.Microsecond)
+	if context.keys_changed(context.Get_keys_down()) {
+		context.keys_down = context.Get_keys_down()
+		if len(context.keys_down) == 2 {
+			if context.keys_down[0] == "Control" && context.keys_down[1] == "c" {
+				return nil, nil, errors.New("CONTROL C")
+			}
+		}
+	}
+
 	var state Exec_state
 	get_next_token := true
 	var t *Token
@@ -932,6 +962,32 @@ func (context *Context) sort_program() {
 	})
 }
 
+// func (context *Context) Run(interrupt chan bool, done chan bool) {
+// 	// clear args
+// 	context.user_variables = make(map[string]variable.User_variable)
+// 	context.sort_program()
+// 	context.program_counter = 0
+// 	context.tokeniser_channel = make(chan Token)
+// 	go context.tokenise_line(context.program[context.program_counter].line)
+// 	for context.program_counter < len(context.program) {
+// 		select {
+// 		default:
+// 			_, _, err := context.execute_statement()
+// 			if err != nil && err.Error() == "CONTROL C" {
+// 				context.terminal.Printline("INTERRUPTED")
+// 				done <- true
+// 				return
+// 			}
+// 			if err != nil {
+// 				context.terminal.Printline("ERROR: " + err.Error())
+// 				done <- true
+// 				return
+// 			}
+// 		}
+// 	}
+// 	done <- true
+// }
+
 func (context *Context) Run(interrupt chan bool, done chan bool) {
 	// clear args
 	context.user_variables = make(map[string]variable.User_variable)
@@ -939,20 +995,21 @@ func (context *Context) Run(interrupt chan bool, done chan bool) {
 	context.program_counter = 0
 	context.tokeniser_channel = make(chan Token)
 	go context.tokenise_line(context.program[context.program_counter].line)
-	for context.program_counter < len(context.program) {
-		select {
-		case <-interrupt:
-			context.terminal.Printline("INTERRUPT")
-			done <- true
-			return
-		default:
+
+	go func() {
+		for context.program_counter < len(context.program) {
 			_, _, err := context.execute_statement()
+			if err != nil && err.Error() == "CONTROL C" {
+				context.terminal.Printline("INTERRUPTED")
+				done <- true
+				return
+			}
 			if err != nil {
 				context.terminal.Printline("ERROR: " + err.Error())
 				done <- true
 				return
 			}
 		}
-	}
-	done <- true
+		done <- true
+	}()
 }

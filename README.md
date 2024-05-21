@@ -117,11 +117,11 @@ CalBASIC also supports the following comparison operators:
 - `<`: Less than
 - `>=`: Greater than or equal to
 - `<=`: Less than or equal to
-
-The following bitwise operators are also supported:
 - `AND`: Bitwise AND
 - `OR`: Bitwise OR
 - `XOR`: Bitwise XOR
+
+Booleans are represented by the number type -- 0 is false, 1 is true.
 
 # Roadmap
 - [x] Basic arithmetic
